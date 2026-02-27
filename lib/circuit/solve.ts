@@ -73,13 +73,15 @@ function looksComplex(s: string): boolean {
   return false;
 }
 
+// NOTE: parseCx() returns Cx | null (from ./complex). We must guard null here to satisfy TS builds.
 function parseValueAsCx(raw: string): Cx {
   const s = String(raw ?? "").trim();
   if (!s) return cx(NaN, NaN);
 
   if (looksComplex(s)) {
     // parseCx supports forms like "1000+200j", "-2j", "3.5", "1e-3+2j"
-    return parseCx(s);
+    const z = parseCx(s);
+    return z ?? cx(NaN, NaN);
   }
   const r = parseRealWithSI(s);
   return cx(r, 0);
@@ -100,7 +102,8 @@ function elementImpedance(type: "R" | "C" | "L", value: string, freqHz: number):
 
   if (looksComplex(s)) {
     // user directly inputs impedance, e.g. "-2j"
-    return parseCx(s);
+    const Z = parseCx(s);
+    return Z ?? cx(NaN, NaN);
   }
 
   const x = parseRealWithSI(s);
