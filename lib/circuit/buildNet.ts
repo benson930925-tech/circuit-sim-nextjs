@@ -11,12 +11,21 @@ function dist2(a: Point, b: Point): number {
   return dx * dx + dy * dy;
 }
 
-export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoints: Record<string, Point> } | { ok: false; error: string } {
+export function buildNet(
+  doc: CircuitDoc
+):
+  | { ok: true; net: CircuitNet; nodePoints: Record<string, Point> }
+  | { ok: false; error: string } {
   const tol = Math.max(6, Math.floor(doc.grid * 0.35)); // pixels
   const tol2 = tol * tol;
 
   // Collect all conductive points: element terminals, junctions, wire points
-  type PRef = { p: Point; kind: "terminal" | "junction" | "wire"; ownerId?: string; term?: "a" | "b" | "gnd" };
+  type PRef = {
+    p: Point;
+    kind: "terminal" | "junction" | "wire";
+    ownerId?: string;
+    term?: "a" | "b" | "gnd";
+  };
   const points: PRef[] = [];
 
   // element terminals
@@ -42,10 +51,10 @@ export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoin
   }
 
   if (doc.elements.length === 0) {
-    return { ok: false, error: "目前沒有任何元件。先放一個 R/V/I/GND 再試。"};
+    return { ok: false, error: "目前沒有任何元件。先放一個 R/V/I/GND 再試。" };
   }
 
-  const hasGround = doc.elements.some(e => e.type === "GND");
+  const hasGround = doc.elements.some((e) => e.type === "GND");
   if (!hasGround) return { ok: false, error: "缺少 GND：請先放置接地（GND）。" };
 
   // Index points and unify close points (snap/overlap)
@@ -68,7 +77,7 @@ export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoin
     const out: number[] = [];
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        const k = `${cx+dx},${cy+dy}`;
+        const k = `${cx + dx},${cy + dy}`;
         const arr = buckets.get(k);
         if (arr) out.push(...arr);
       }
@@ -87,16 +96,22 @@ export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoin
   }
 
   // Additionally, union all points that belong to the same wire polyline (ensures continuity even if sparse points)
-  // In our representation, all wire points are already included, but we still union consecutive points for safety.
+  // In our representation, all wire points are already included, but we still union within each wire for safety.
   const wirePointIndices = new Map<string, number[]>();
   for (let i = 0; i < points.length; i++) {
-    if (points[i].kind === "wire" && points[i].ownerId) {
-      const arr = wirePointIndices.get(points[i].ownerId) ?? [];
-      arr.push(i);
-      wirePointIndices.set(points[i].ownerId, arr);
-    }
+    if (points[i].kind !== "wire") continue;
+
+    // FIX: ownerId may be undefined in type, so guard it to satisfy TS and avoid runtime issues
+    const ownerId = points[i].ownerId;
+    if (!ownerId) continue;
+
+    const arr = wirePointIndices.get(ownerId) ?? [];
+    arr.push(i);
+    wirePointIndices.set(ownerId, arr);
   }
+
   for (const arr of wirePointIndices.values()) {
+    if (arr.length <= 1) continue;
     // union all within the wire
     for (let k = 1; k < arr.length; k++) uf.union(arr[0], arr[k]);
   }
@@ -107,7 +122,8 @@ export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoin
   const groupHasGround = new Map<number, boolean>();
 
   for (const [root, idxs] of groups.entries()) {
-    let sx = 0, sy = 0;
+    let sx = 0,
+      sy = 0;
     let g = false;
     for (const idx of idxs) {
       sx += points[idx].p.x;
@@ -136,8 +152,10 @@ export function buildNet(doc: CircuitDoc): { ok: true; net: CircuitNet; nodePoin
   for (let i = 0; i < points.length; i++) {
     const pr = points[i];
     if (pr.kind !== "terminal" || !pr.ownerId) continue;
+
     const root = uf.find(i);
     const nid = rootToNodeId.get(root)!;
+
     const prev = elementToNodes.get(pr.ownerId) ?? {};
     if (pr.term === "a") prev.a = nid;
     if (pr.term === "b") prev.b = nid;
